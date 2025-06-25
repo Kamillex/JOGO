@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Mario-Style Platformer</title>
+    <link rel="stylesheet" href="./CSS/style2.css" />
+  </head>
+  <body>
+    <div id="gameInfo">
+      <div id="score">Moedas restantes: 150</div>
+      <div id="timer">Tempo: 00:00</div>
+    </div>
+    <div id="canvas-container">
+      <canvas id="gameCanvas"></canvas>
+    </div>
+    <audio id="audio" src="./SND/Música.mp3" loop></audio>
+    <script>
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d");
+
+      canvas.width = 1080;
+      canvas.height = 400;
+      function requestFullscreen() {
+    if (canvas.requestFullscreen) {
+        canvas.requestFullscreen();
+    } else if (canvas.webkitRequestFullscreen) {
+        canvas.webkitRequestFullscreen();
+    } else if (canvas.msRequestFullscreen) {
+        canvas.msRequestFullscreen();
+    }
+}
+
+let fullscreenActivated = false;
+
+window.addEventListener('keydown', (e) => {
+    if (!fullscreenActivated && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        requestFullscreen();
+        fullscreenActivated = true;
+    }
+});
+
+      let TOTAL_COINS = 150;
+      let coinsLeft = TOTAL_COINS;
+      let gameTime = 0;
+      let displayTime = 0;
+      let gameActive = true;
+      const scoreElement = document.getElementById("score");
+      const timerElement = document.getElementById("timer");
+      const messageElement = document.getElementById("message");
+
+      let imgCoin = new Image();
+      imgCoin.src = "./IMG/Coin 01.png";
+      let imgCenario = new Image();
+      imgCenario.src = "./IMG/Fábrica.png";
+      imgCenario.onload = () => {
+        requestAnimationFrame(gameLoop);
+      };
+      let imgSparky = new Image();
+      imgSparky.src = "./IMG/Sparky.png";
+
+      let player = {
+        x: 100,
+        y: 300,
+        width: 40,
+        height: 60,
+        speed: 2.7,
+        jumpForce: 14,
+        velX: 0,
+        velY: 0,
+        isJumping: false,
+        color: "#E52521",
+        update: function () {
+          this.velY += 0.5;
+          this.x += this.velX;
+          this.y += this.velY;
+          if (this.y < 0) {
+            this.y = 0;
+            this.velY = 0; // impede que ele continue subindo
+          }
+          if (this.x < 0) this.x = 0;
+          if (this.x + this.width > canvas.width)
+            this.x = canvas.width - this.width;
+          if (this.y + this.height > canvas.height) {
+            this.y = canvas.height - this.height;
+            this.velY = 0;
+            this.isJumping = false;
+          }
+        },
+        draw: function () {
+          ctx.fillStyle = this.color;
+          ctx.fillRect(this.x, this.y, this.width, this.height);
+          ctx.fillStyle = "white";
+          ctx.fillRect(this.x + 10, this.y + 10, 8, 8);
+          ctx.fillRect(this.x + 22, this.y + 10, 8, 8);
+          ctx.fillStyle = "black";
+          ctx.fillRect(this.x + 13, this.y + 13, 4, 4);
+          ctx.fillRect(this.x + 25, this.y + 13, 4, 4);
+          ctx.fillStyle = "#E52521";
+          ctx.fillRect(this.x, this.y, this.width, 10);
+          ctx.fillRect(this.x + 30, this.y - 10, 10, 20);
+        },
+        jump: function () {
+          if (!this.isJumping) {
+            this.velY = -this.jumpForce;
+            this.isJumping = true;
+          }
+        },
+        canReach: function (y) {
+          const maxJumpHeight = (this.jumpForce * this.jumpForce) / (2 * 0.5);
+          return this.y - y <= maxJumpHeight + 15;
+        },
+      };
+
+      let platforms = [];
+      let platformColors = ["#00BCDD", "#00BCDD"];
+      let MIN_PLATFORM_DISTANCE = 100;
+      let MAX_PLATFORM_HEIGHT = 150;
+
+      function isPlatformPositionValid(newPlatform) {
+        for (let platform of platforms) {
+          let dx = Math.abs(newPlatform.x - platform.x);
+          let dy = Math.abs(newPlatform.y - platform.y);
+          if (Math.sqrt(dx * dx + dy * dy) < MIN_PLATFORM_DISTANCE)
+            return false;
+        }
+        if (newPlatform.y < canvas.height - 40) {
+          let canReach = platforms.some(
+            (platform) =>
+              player.canReach(newPlatform.y) ||
+              (platform.y > newPlatform.y &&
+                player.canReach(platform.y - newPlatform.y))
+          );
+          if (!canReach) return false;
+        }
+        return true;
+      }
+
+      function createPlatform() {
+        if (!gameActive || coinsLeft <= 0) return null;
+        let attempts = 0,
+          newPlatform;
+        do {
+          let width = Math.random() * 175 + 50;
+          let x = Math.random() * (canvas.width - width);
+          let y =
+            Math.random() < 0.8
+              ? Math.random() * 100 + (canvas.height - 150)
+              : Math.random() * MAX_PLATFORM_HEIGHT + 50;
+          let color =
+            platformColors[Math.floor(Math.random() * platformColors.length)];
+          let lifeTime = Math.random() * 2000 + 4000;
+
+          newPlatform = {
+            id: "platform-" + Math.random().toString(36).substr(2, 9),
+            x,
+            y,
+            width,
+            height: 20,
+            color,
+            createdAt: gameTime,
+            lifeTime,
+          };
+          if (++attempts >= 50) return null;
+        } while (!isPlatformPositionValid(newPlatform));
+        platforms.push(newPlatform);
+        return newPlatform.id;
+      }
+
+      let coins = [];
+
+      function createCoin(x, y, platformId) {
+        if (coinsLeft <= 0) return;
+        coins.push({
+          x,
+          y,
+          width: 32,
+          height: 32,
+          collected: false,
+          animationFrame: 0,
+          platformId,
+        });
+      }
+
+      function drawBackground() {
+        ctx.drawImage(imgCenario, 0, 0, canvas.width, canvas.height);
+      }
+
+      function formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins.toString().padStart(2, "0")}:${secs
+          .toString()
+          .padStart(2, "0")}`;
+      }
+
+      let lastTime = 0;
+      let bgOffset = 0;
+      const bgLoopTime = 100000;
+
+      function gameLoop(timestamp) {
+        const deltaTime = timestamp - lastTime;
+        lastTime = timestamp;
+        gameTime += deltaTime;
+
+        if (gameActive) {
+          if (
+            Math.floor(gameTime / 1000) >
+            Math.floor((gameTime - deltaTime) / 1000)
+          ) {
+            displayTime = Math.floor(gameTime / 1000);
+            timerElement.textContent = `Tempo: ${formatTime(displayTime)}`;
+          }
+        }
+
+        bgOffset = ((gameTime % bgLoopTime) / bgLoopTime) * canvas.width * 2;
+
+        drawBackground();
+
+        player.velX = 0;
+        if (keys["ArrowLeft"]) player.velX = -player.speed;
+        if (keys["ArrowRight"]) player.velX = player.speed;
+        if (keys["ArrowUp"] || keys[" "]) player.jump();
+
+        if (
+          gameActive &&
+          coinsLeft > 0 &&
+          gameTime > 2000 &&
+          Math.random() < 0.01 &&
+          platforms.length < 10
+        ) {
+          const platformId = createPlatform();
+          if (platformId) {
+            const platform = platforms.find((p) => p.id === platformId);
+            const maxCoins = Math.min(4, Math.floor(platform.width / 40));
+            const coinCount = Math.min(maxCoins, coinsLeft);
+            for (let i = 0; i < coinCount; i++) {
+              createCoin(platform.x + 20 + i * 40, platform.y - 30, platformId);
+            }
+          }
+        }
+
+        player.update();
+
+        const removedPlatformIds = [];
+        platforms = platforms.filter((platform) => {
+          if (gameTime - platform.createdAt > platform.lifeTime) {
+            removedPlatformIds.push(platform.id);
+            return false;
+          }
+          if (
+            player.x + player.width > platform.x &&
+            player.x < platform.x + platform.width &&
+            player.y + player.height > platform.y &&
+            player.y + player.height <
+              platform.y + platform.height + player.velY &&
+            player.velY > 0
+          ) {
+            player.y = platform.y - player.height;
+            player.velY = 0;
+            player.isJumping = false;
+          }
+          return true;
+        });
+
+        // Remover moedas das plataformas que sumiram (sem alterar a contagem!)
+        if (removedPlatformIds.length > 0) {
+          coins = coins.filter(
+            (coin) => !removedPlatformIds.includes(coin.platformId)
+          );
+        }
+
+        // Desenhar plataformas
+        platforms.forEach((platform) => {
+          ctx.fillStyle = platform.color;
+          ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+        });
+
+        // Desenhar e animar moedas + verificar coleta
+        coins = coins.filter((coin) => {
+          const frameWidth = 32,
+            frameHeight = 32;
+          const frameIndex = Math.floor(coin.animationFrame);
+          ctx.drawImage(
+            imgCoin,
+            frameIndex * frameWidth,
+            0,
+            frameWidth,
+            frameHeight,
+            coin.x,
+            coin.y,
+            coin.width,
+            coin.height
+          );
+          coin.animationFrame = (coin.animationFrame + 0.1) % 8;
+
+          const hit =
+            player.x < coin.x + coin.width &&
+            player.x + player.width > coin.x &&
+            player.y < coin.y + coin.height &&
+            player.y + player.height > coin.y;
+
+          if (hit) {
+            coinsLeft--;
+            scoreElement.textContent = `Moedas restantes: ${coinsLeft}`;
+            return false;
+          }
+          return true;
+        });
+
+        player.draw();
+
+        if (coinsLeft <= 0 && gameActive) {
+          gameActive = false;
+
+          // Esconde tudo
+          document.getElementById("gameCanvas").style.display = "none";
+          document.getElementById("gameInfo").style.display = "none";
+          audio.pause(); // Para a música
+
+          // Mostra e toca o vídeo
+          const video = document.getElementById("finalVideo");
+          video.style.display = "block";
+          video.play();
+
+          // Limpa plataformas e moedas
+          platforms = [];
+          coins = [];
+
+          return; // Para o loop
+
+          if (displayTime >= 60) {
+            gameActive = false;
+            timerElement.textContent = "Tempo: 01:10";
+            scoreElement.textContent = `Moedas restantes: ${coinsLeft} | Tempo esgotado! Tente novamente`;
+            return; // Para o loop do jogo
+          }
+        }
+
+        requestAnimationFrame(gameLoop);
+      }
+
+      const keys = {};
+      window.addEventListener("keydown", (e) => (keys[e.key] = true));
+      window.addEventListener("keyup", (e) => (keys[e.key] = false));
+
+      platforms.push({
+        id: "ground-platform",
+        x: 0,
+        color: ByteLengthQueuingStrategy,
+        width: canvas.width,
+        height: 20,
+        createdAt: 0,
+        lifeTime: Infinity,
+      });
+
+      scoreElement.textContent = `Moedas restantes: ${coinsLeft}`;
+      requestAnimationFrame(gameLoop);
+
+      function iniciarAudio() {
+        audio.play().catch(function (error) {
+          console.error("Erro ao tentar reproduzir o áudio:", error);
+        });
+        window.removeEventListener("click", iniciarAudio);
+        window.removeEventListener("keydown", iniciarAudio);
+      }
+
+      window.addEventListener("click", iniciarAudio); //Window é para um evento global na janela do navegador
+      window.addEventListener("keydown", iniciarAudio);
+    </script>
+
+    <video
+      id="finalVideo"
+      width="1080"
+      height="400"
+      style="display: none"
+      autoplay
+    >
+      <source src="./VIDEO/Corpo.mp4" type="video/mp4" />
+      Seu navegador não suporta a tag de vídeo.
+    </video>
+  </body>
+</html>

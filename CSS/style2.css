@@ -1,0 +1,58 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    width: 100vw;
+    background-color: #1e0000; /* marrom escuro do seu fundo */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 900;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 5px  ;
+            background-color: #300500;
+        }
+        canvas {
+            display: flex;
+            align-items:center;
+        }
+        #gameInfo {
+            position: absolute;
+            top: 95px;
+            left: 105px;
+            font-family: Arial, sans-serif;
+            font-size: 24px;
+             z-index: 10;
+            color: white;
+            text-shadow: 2px 2px 4px #000000;
+            display: flex;
+            flex-direction: column;
+        }
+        #timer {
+              margin-top: 5px;
+             color: white;
+        }
+        #score {
+            margin-bottom: 5px;
+        }
+       #canvas-container{
+        display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-grow: 1;
+       }
+       #finalVideo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-grow: 1;
+        margin-bottom: 60px;
+       }
